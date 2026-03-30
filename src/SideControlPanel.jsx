@@ -1,16 +1,16 @@
 import InfoDialog from "./InfoDialog";
 import DetailsList from "./DetailsList";
-//. Todo: fix section for tab 2 add text explonation for info
-//Todo: add tab 3  simulation fix
+import { m0 } from "./physics";
+
 const SideControlPanel = ({
-  voltage, setVoltage, temperature, setTemperature, humidity, setHumidity, 
-  computeMetrics, tab, parts = [], totalPartsPriceLow = "0.00", totalPartsPriceHigh = "0.00", selectedChip, chipModel,
-  V0, setV0, d_nm, setDnm, E_eV, setE, J_ex, setJex, M_FMI, setM
+  voltage, setVoltage, setTemperature, parameter, setParameter,
+  tab, parts = [], totalPartsPriceLow = "0.00", totalPartsPriceHigh = "0.00", selectedChip, chipModel,
+  V0, setV0, d_nm, setDnm, E_eV, setE, J_ex, setJex, M_FMI, setM, defaults, spinUP, setSpinUP, particleCount, setParticleCount, effectiveElectronMassMultiplier, setEffectiveElectronMassMultiplier
 }) => {
   return (
-    <aside className="w-72 p-4">
+    <aside className="w-full lg:w-72 p-3 sm:p-4">
       {tab === 1 ? (
-        <div className="bg-white rounded-lg p-4 shadow">
+        <div className="bg-white rounded-lg p-4 shadow max-h-[60vh] lg:max-h-none overflow-y-auto">
           <div className="text-sm font-semibold mb-3">Parts & Pricing</div>
           <div className="overflow-y">
             {parts.map((p) => (
@@ -30,32 +30,28 @@ const SideControlPanel = ({
           </div>
         </div>
       ) : tab === 2 ? (
-        <div className=" sticky top-4">
+        <div className=" sticky top-4 max-h-[60vh] lg:max-h-none overflow-y-auto">
           <div className="bg-white rounded-lg p-4 shadow mb-2">
           <div className="text-sm font-semibold mb-3">Barrier & FMI Controls</div>
 
           <label className="block text-xs"><InfoDialog text="Height of the potential barrier" placement="left"/> Barrier height V₀: <span className="font-semibold">{V0.toFixed(2)} eV</span></label>
-          <input className="w-full" type="range" min="0.5" max="3.0" step="0.01" value={V0} onChange={(e)=>setV0(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.5" max="3.0" step="0.01" value={V0} onChange={(e)=>setV0(+e.target.value)} />
 
           <label className="block text-xs mt-3"><InfoDialog text="Width of the potential barrier" placement="left"/> Barrier width d: <span className="font-semibold">{d_nm.toFixed(2)} nm</span></label>
-          <input className="w-full" type="range" min="0.5" max="10.0" step="0.1" value={d_nm} onChange={(e)=>setDnm(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.5" max="10.0" step="0.1" value={d_nm} onChange={(e)=>setDnm(+e.target.value)} />
 
           <label className="block text-xs mt-3"><InfoDialog text="Kinetic energy of the incident electron" placement="left"/> Electron energy E: <span className="font-semibold">{E_eV.toFixed(2)} eV</span></label>
-          <input className="w-full" type="range" min="0.05" max="2.5" step="0.01" value={E_eV} onChange={(e)=>setE(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.05" max="2.5" step="0.01" value={E_eV} onChange={(e)=>setE(+e.target.value)} />
 
           <div className="text-sm font-semibold mt-3"><InfoDialog text="Exchange coupling strength between electron spin and FMI magnetization" placement="left"/> FMI exchange</div>
           <label className="block text-xs">J_ex: <span className="font-semibold">{J_ex.toFixed(3)} eV</span></label>
-          <input className="w-full" type="range" min="0.0" max="2.0" step="0.001" value={J_ex} onChange={(e)=>setJex(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.0" max="2.0" step="0.001" value={J_ex} onChange={(e)=>setJex(+e.target.value)} />
 
           <label className="block text-xs mt-2"><InfoDialog text="Magnetization factor of the ferromagnetic insulator (-1 to +1)" placement="left"/> M_FMI: <span className="font-semibold">{M_FMI.toFixed(2)}</span></label>
-          <input className="w-full" type="range" min="-1.0" max="1.0" step="0.05" value={M_FMI} onChange={(e)=>setM(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="-1.0" max="1.0" step="0.05" value={M_FMI} onChange={(e)=>setM(+e.target.value)} />
           </div>
           <div className="bg-white rounded-lg p-4 shadow ">
-            {/* <div className="text-sm font-semibold mb-2">Results</div> */}
-            <div className="bg-slate-50 rounded-md p-3 mt-2">
-              <div className="text-sm font-semibold"><InfoDialog text="Electron loss percentage in the FMI" placement="left"/> Efficiency</div>
-              <div className="text-xl font-bold mt-1">{computeMetrics(NaN, NaN, {}, V0, d_nm, E_eV, J_ex, M_FMI).efficiency}%</div>
-            </div>
+            <div className="text-sm font-semibold mb-2">Results</div>
             <DetailsList
               title="Purpose of graphs"
               infoText="Explains what each graph shows"
@@ -68,36 +64,66 @@ const SideControlPanel = ({
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-lg p-4 shadow">
+        <div className="bg-white rounded-lg p-4 shadow max-h-[60vh] lg:max-h-none overflow-y-auto">
           <div className="text-sm font-semibold mb-3">Parameters</div>
-          <label className="block text-sm text-slate-700 mb-2">Voltage: <span className="font-semibold">{voltage.toFixed(1)} V</span></label>
-          <input className="w-full" type="range" min="1" max="12" step="0.1" value={voltage} onChange={(e)=>setVoltage(+e.target.value)} />
-          <label className="block text-sm text-slate-700 mb-2">Temperature: <span className="font-semibold">{temperature.toFixed(1)} °C</span></label>
-          <input className="w-full" type="range" min="1" max="120" step="0.1" value={temperature} onChange={(e)=>setTemperature(+e.target.value)} />
+          
+          <div className="block text-xs"><InfoDialog text="Enable or disable voltage" placement="left"/><button className={`${parameter ? 'bg-red-500' : 'bg-green-500'} text-white py-1 px-3 rounded`} onClick={()=>setParameter(!parameter)}>{parameter ? <h6>Disable</h6>: <h5>Enable</h5>} </button> {parameter === true? <>Voltage: <span className="font-semibold">{voltage.toFixed(1)} V</span></> : null}  </div>
+          {parameter ?(
+            <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="1" max="200" step="0.1" value={voltage} onChange={(e)=>setVoltage(+e.target.value)} />
+          ) : null}
           <label className="block text-xs"><InfoDialog text="Height of the potential barrier" placement="left"/> Barrier height V₀: <span className="font-semibold">{V0.toFixed(2)} eV</span></label>
-          <input className="w-full" type="range" min="0.5" max="3.0" step="0.01" value={V0} onChange={(e)=>setV0(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.5" max="10" step="0.01" value={V0} onChange={(e)=>setV0(+e.target.value)} />
 
           <label className="block text-xs mt-3"><InfoDialog text="Width of the potential barrier" placement="left"/> Barrier width d: <span className="font-semibold">{d_nm.toFixed(2)} nm</span></label>
-          <input className="w-full" type="range" min="0.5" max="10.0" step="0.1" value={d_nm} onChange={(e)=>setDnm(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.5" max="10.0" step="0.1" value={d_nm} onChange={(e)=>setDnm(+e.target.value)} />
 
           <label className="block text-xs mt-3"><InfoDialog text="Kinetic energy of the incident electron" placement="left"/> Electron energy E: <span className="font-semibold">{E_eV.toFixed(2)} eV</span></label>
-          <input className="w-full" type="range" min="0.05" max="2.5" step="0.01" value={E_eV} onChange={(e)=>setE(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.05" max="2.5" step="0.01" value={E_eV} onChange={(e)=>setE(+e.target.value)} />
 
           <div className="text-sm font-semibold mt-3"><InfoDialog text="Exchange coupling strength between electron spin and FMI magnetization" placement="left"/> FMI exchange</div>
           <label className="block text-xs">J_ex: <span className="font-semibold">{J_ex.toFixed(3)} eV</span></label>
-          <input className="w-full" type="range" min="0.0" max="2.0" step="0.001" value={J_ex} onChange={(e)=>setJex(+e.target.value)} />
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0.0" max="2.0" step="0.001" value={J_ex} onChange={(e)=>setJex(+e.target.value)} />
 
           <label className="block text-xs mt-2"><InfoDialog text="Magnetization factor of the ferromagnetic insulator (-1 to +1)" placement="left"/> M_FMI: <span className="font-semibold">{M_FMI.toFixed(2)}</span></label>
-          <input className="w-full" type="range" min="-1.0" max="1.0" step="0.05" value={M_FMI} onChange={(e)=>setM(+e.target.value)} />
-          <div className="mt-4">
-            <div className="text-sm font-semibold">Results</div>
-            <div className="bg-slate-50 rounded-md p-3 mt-2">
-              <div className="text-sm font-semibold">Efficiency</div>
-              <div className="text-xl font-bold mt-1">{computeMetrics(voltage, temperature, chipModel, V0, d_nm, E_eV, J_ex, M_FMI).efficiency}%</div>
-              <div className="text-sm text-slate-600 mt-2">Est. cost: ${computeMetrics(voltage, temperature, chipModel, V0, d_nm, E_eV, J_ex, M_FMI).cost_est}</div>
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="-1.0" max="1.0" step="0.05" value={M_FMI} onChange={(e)=>setM(+e.target.value)} />
+          
+          <label className="block text-xs"><InfoDialog text="multiplyier of m0, parameter that describes how an electron behaves within a crystal lattice" placement="left"/>Effective Electron Mass Multiplier: <span className="font-semibold">{effectiveElectronMassMultiplier.toFixed(2)}</span></label>
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="0" max="3" step="0.01" value={effectiveElectronMassMultiplier} onChange={(e)=>setEffectiveElectronMassMultiplier(+e.target.value)} />
+
+          <div className="text-sm font-semibold mt-3"><InfoDialog text="Number of particles constantly in the simulation, it is the same as the max number of possible particles" placement="left"/> Particle Count</div>
+          <label className="block text-xs">Particle Count: <span className="font-semibold">{particleCount}</span></label>
+          <input className="w-full h-2 accent-sky-500 cursor-pointer" type="range" min="1" max="100" step="1" value={particleCount} onChange={(e)=>setParticleCount(parseInt(e.target.value))} />
+
+           <div className="flex gap-2 mt-2">
+
+              <button
+                className="px-3 py-2 rounded-md bg-gray-600 text-amber-50 hover:bg-gray-500 transition-colors"
+                onClick={() => {
+                  setVoltage(5);
+                  setDnm(defaults.d_nm);
+                  setE(defaults.E_eV);
+                  setJex(defaults.J_ex);
+                  setM(defaults.M_FMI);
+                  setV0(defaults.V0_eV);
+                  setTemperature(25);
+                }}
+              >
+                Reset
+              </button>
+
+              <button
+                className={`px-3 py-2 rounded-md transition-colors ${
+                  spinUP
+                    ? "bg-sky-600 text-white hover:bg-sky-500"
+                    : "bg-emerald-500 text-white hover:bg-emerald-400"
+                }`}
+                onClick={() => setSpinUP(!spinUP)}
+              >
+                {spinUP ? "Spin Up" : "Spin Down"}
+              </button>
+
             </div>
           </div>
-        </div>
       )}
     </aside>
   );

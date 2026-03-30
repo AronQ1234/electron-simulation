@@ -64,7 +64,7 @@ export default function InfoDialog({ text = "", placement = "top", className = "
             bg-white dark:bg-slate-800 text-slate-900 dark:text-white
             text-sm leading-tight
             rounded-md shadow-lg ring-1 ring-slate-200 dark:ring-slate-700
-            px-3 py-2
+            px-3 py-2 sm:px-4 sm:py-2
           "
         >
           <div className="text-xs">{text}</div>

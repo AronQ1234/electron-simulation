@@ -1,8 +1,7 @@
 // src/SimCanvas.jsx
 import React, { forwardRef, useImperativeHandle, useRef, useState, useMemo, useEffect } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
-import * as THREE from 'three';
 import Plot from "react-plotly.js";
 import * as PH from "./physics"; // your physics helper module
 import ElectronFlowSim from "./ElectronFlowSim";
@@ -294,11 +293,11 @@ function BarrierPlots({
 
   return (
     <div className="flex flex-col gap-3 w-full h-full">
-      <div className="w-full h-123">
+      <div className="w-full h-75 sm:h-95 lg:h-105">
         <Plot data={transTraces} layout={transLayout} config={{ responsive: true }} useResizeHandler={true} className="w-full h-full" />
       </div>
 
-      <div className="w-full h-123">
+      <div className="w-full h-75 sm:h-95 lg:h-105">
         <Plot data={waveTraces} layout={waveLayout} config={{ responsive: true }} useResizeHandler={true} className="w-full h-full" />
       </div>
     </div>
@@ -306,7 +305,7 @@ function BarrierPlots({
 }
 
 /* ---------- SimCanvas wrapper ---------- */
-const SimCanvas = forwardRef(({voltage, temperature, humidity, tab, modelKey, parts, V0, d_nm, E_eV, J_ex, M_FMI }, ref) => {
+const SimCanvas = forwardRef(({voltage, parameter, tab, modelKey, parts, V0, d_nm, E_eV, J_ex, M_FMI, spinUP, setSpinUP, particleCount, effectiveElectronMassMultiplier, isFullScreen, enterFullscreen, exitFullscreen, setModelKey }, ref) => {
   useImperativeHandle(ref, () => ({
     reset: () => {},
     downloadCSV: () => {},
@@ -318,11 +317,17 @@ const SimCanvas = forwardRef(({voltage, temperature, humidity, tab, modelKey, pa
   return (
     <div className="w-full h-full">
       {tab === 1 ? (
-        <Canvas style={{ width: "100%", height: "100%" }} camera={{ position: [0, 2.2, 9], fov: 45 }}>
+        <Canvas dpr={[1, 1.5]} gl={{ antialias: false }} style={{ width: "100%", height: "100%" }} camera={{ position: [0, 2.2, 9], fov: 45 }}>
           <ambientLight intensity={0.9} />
           <directionalLight position={[10, 10, 5]} intensity={0.8} />
           <SsdModule parts={parts} modelName={modelName} />
-          <OrbitControls enableDamping />
+          <OrbitControls
+            enableDamping
+            enablePan={true}
+            maxPolarAngle={Math.PI / 2}
+            // minDistance={4}
+            // maxDistance={15}
+          />
         </Canvas>
       ) : tab === 2 ? (
 
@@ -341,14 +346,22 @@ const SimCanvas = forwardRef(({voltage, temperature, humidity, tab, modelKey, pa
             {/* small orbit disabled or keep controls if you want */}
             <ElectronFlowSim
               voltage={voltage}
-              temp={temperature}
-              humidity={humidity}
+              // temp={temperature}
+              setModelKey={setModelKey}
+              modelKey={modelKey}
+              parameter={parameter}
               V0_eV={V0}
               d_nm={d_nm}
               E_eV={E_eV}
               J_ex={J_ex}
               M_FMI={M_FMI}
-              particleCount={220}
+              particleCount={particleCount}
+              spinUp={spinUP}
+              setSpinUp={setSpinUP}
+              effectiveElectronMassMultiplier={effectiveElectronMassMultiplier}
+              isFullScreen = {isFullScreen}
+                                  enterFullscreen={enterFullscreen}
+                    exitFullscreen={exitFullscreen}
             />
         </div>
       )}

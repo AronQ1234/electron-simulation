@@ -28,21 +28,23 @@ export const KB_EV = 8.617333262145e-5;
 
 //Todo: replace these defaults with our model details
 export const OUR_MODEL_DEFAULTS = {
-  V0_eV: 1.70, //Barrier height in eV
-  d_m: 3.0e-9 * 1e9,//Barrier width in meters (nm → m)
+  V0_eV: 3, //Barrier height in eV
+  d_m: 3.0* 1e-9,//Barrier width in meters (nm → m)
   d_nm: 3.0, //Barrier width in nm (for display)
   E_eV: 0.50,//Electron energy in eV
-  J_ex: 0.050,//Exchange coupling strength in eV
-  M_FMI: 1.0,//Magnetisierungsfaktor (dimensionslos, ±1)
+  J_ex: 0.080,//Exchange coupling strength in eV
+  M_FMI: -1.0,//Magnetisierungsfaktor (dimensionslos, ±1)
+  effective_electron_mass_multiplier: 3, //multiplier of effective electron mass
 };
 //Todo: replace these defaults with current industrie model details
 export const CURRENT_MARKET_DEFAULTS = {
-  V0_eV: 1.70, //Barrier height in eV
-  d_m: 3.5e-9 * 1e9,//Barrier width in meters (nm → m)
-  d_nm: 3.5, //Barrier width in nm (for display)
+  V0_eV: 3, //Barrier height in eV
+  d_m: 3.0e-9,//Barrier width in meters (nm → m)
+  d_nm: 3.0, //Barrier width in nm (for display)
   E_eV: 0.50,//Electron energy in eV
-  J_ex: 0.050,//Exchange coupling strength in eV
-  M_FMI: 1.0,//Magnetisierungsfaktor (dimensionslos, ±1)
+  J_ex: 0,//Exchange coupling strength in eV
+  M_FMI: 0,//Magnetisierungsfaktor (dimensionslos, ±1)
+  effective_electron_mass_multiplier: 0.6, //multiplier of effective electron mass
 }
 export const E_MIN = 0.1 // Minimum energy for plot (eV)
 export const E_MAX_OFFSET = 0.5 // Energy range above V0 (eV)
@@ -58,20 +60,20 @@ const cAbs2 = (z) => {
 };
 
 // ------------------- WKB functions -------------------
-export function wkbTunneling(V0_eV, d_m, E_eV) {
+export function wkbTunneling(V0_eV, d_m, E_eV, effective_electron_mass_multiplier = OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier) {
   // V0_eV, E_eV in eV, d_m in meters
   if (E_eV >= V0_eV) return 1.0;
   const V0_J = toJ(V0_eV);
   const E_J = toJ(E_eV);
-  const kappa = Math.sqrt(2 * m_e * (V0_J - E_J)) / hbar;
+  const kappa = Math.sqrt(2 * (m0 * effective_electron_mass_multiplier) * (V0_J - E_J)) / hbar;
   const T = Math.exp(-2 * kappa * d_m);
   return T;
 }
 
-export function wkbTunnelingProbability(V0_J, E_J, d_m) {
+export function wkbTunnelingProbability(V0_J, E_J, d_m,  effective_electron_mass_multiplier=OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier) {
   // legacy wrapper: expects SI units (J, J, m)
   if (E_J >= V0_J) return 1.0;
-  const kappa = Math.sqrt(2 * m_e * (V0_J - E_J)) / hbar;
+  const kappa = Math.sqrt(2 * (m0 * effective_electron_mass_multiplier) * (V0_J - E_J)) / hbar;
   return Math.exp(-2 * kappa * d_m);
 }
 
@@ -93,7 +95,7 @@ export function fmiExchangeAplitting(J_ex = OUR_MODEL_DEFAULTS.J_ex, M_FMI = OUR
 }
 
 // ------------------- transfer-matrix coefficient solver -------------------
-export function calculateWavefunctionCoefficients(V0_J, E_J, d_m) {
+export function calculateWavefunctionCoefficients(V0_J, E_J, d_m,  effective_electron_mass_multiplier=OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier) {
   // t, r, A, B are math.complex; k1, k2_or_kappa are real numbers
 
   // protect inputs
@@ -101,11 +103,11 @@ export function calculateWavefunctionCoefficients(V0_J, E_J, d_m) {
   E_J = safeNum(E_J, toJ(OUR_MODEL_DEFAULTS.E_eV));
   d_m = safeNum(d_m, OUR_MODEL_DEFAULTS.d_m);
 
-  const k1 = Math.sqrt(2 * m_e * E_J) / hbar;
+  const k1 = Math.sqrt(2 * (m0 * effective_electron_mass_multiplier) * E_J) / hbar;
 
   if (E_J >= V0_J) {
     // over-barrier (oscillatory inside)
-    const k2 = Math.sqrt(2 * m_e * (E_J - V0_J)) / hbar;
+    const k2 = Math.sqrt(2 *  effective_electron_mass_multiplier * (E_J - V0_J)) / hbar;
     const cos_k2d = Math.cos(k2 * d_m);
     const sin_k2d = Math.sin(k2 * d_m);
 
@@ -132,7 +134,7 @@ export function calculateWavefunctionCoefficients(V0_J, E_J, d_m) {
     return { t, r, k1, k2_or_kappa: k2, A, B };
   } else {
     // tunneling regime: exponentials inside barrier
-    const kappa = Math.sqrt(2 * m_e * (V0_J - E_J)) / hbar;
+    const kappa = Math.sqrt(2 * (m0 * effective_electron_mass_multiplier) * (V0_J - E_J)) / hbar;
     const sinh_kd = Math.sinh(kappa * d_m);
     const cosh_kd = Math.cosh(kappa * d_m);
 
@@ -164,9 +166,9 @@ export function calculateWavefunctionCoefficients(V0_J, E_J, d_m) {
 }
 
 // ------------------- wavefunction builder -------------------
-export function calculateWavefunction(x_m_array, V0_J, E_J, d_m) {
+export function calculateWavefunction(x_m_array, V0_J, E_J, d_m, effective_electron_mass_multiplier=OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier) {
   // prepare coefficients
-  const coeffs = calculateWavefunctionCoefficients(V0_J, E_J, d_m);
+  const coeffs = calculateWavefunctionCoefficients(V0_J, E_J, d_m, effective_electron_mass_multiplier);
   const { t, r, k1, k2_or_kappa, A, B } = coeffs;
   const N = x_m_array.length;
 
@@ -244,13 +246,13 @@ export function calculateTunnelingProbabilitiesExact(V0_eV, E_eV, d_nm, J_ex = O
 }
 
 // ------------------- convenience WKB probabilities for spin channels -------------------
-export function calculateTunnelingProbabilitiesWKB(V0_eV, E_eV, d_nm, J_ex = OUR_MODEL_DEFAULTS.J_ex, M_FMI = OUR_MODEL_DEFAULTS.M_FMI) {
+export function calculateTunnelingProbabilitiesWKB(V0_eV, E_eV, d_nm, J_ex = OUR_MODEL_DEFAULTS.J_ex, M_FMI = OUR_MODEL_DEFAULTS.M_FMI, effective_electron_mass_multiplier=OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier) {
   const d_m = d_nm * 1e-9;
   const DeltaE = spinSplitting(J_ex, M_FMI);
   const E_up = E_eV + DeltaE / 2.0;
   const E_down = E_eV - DeltaE / 2.0;
-  const T_up = wkbTunneling(V0_eV, d_m, E_up);
-  const T_down = wkbTunneling(V0_eV, d_m, E_down);
+  const T_up = wkbTunneling(V0_eV, d_m, E_up,effective_electron_mass_multiplier);
+  const T_down = wkbTunneling(V0_eV, d_m, E_down,effective_electron_mass_multiplier);
   return { T_up, T_down };
 }
 function cAbs(a) { return Math.sqrt(a.re * a.re + a.im * a.im); }
@@ -334,6 +336,221 @@ export function validateQuantumMechanics(V0_J, E_J, d_m) {
   return { isValid: is_valid, details };
 }
 
+
+// ------------------- Temperature-dependent tunneling -------------------
+/**
+ * Arrhenius temperature dependence for direct tunneling current
+ * Models how current increases exponentially with temperature
+ * 
+ * Formula: I(T) = I_0 * exp(-E_a / (k_B * T))
+ * 
+ * @param {number} I_0 - Reference current at 0K (Amperes)
+ * @param {number} E_a - Activation energy (eV) - energy barrier for tunneling
+ * @param {number} T_kelvin - Absolute temperature (Kelvin)
+ * @returns {number} Current at given temperature (Amperes)
+ */
+export function calculateTemperatureDependentCurrent(I_0, E_a, T_kelvin) {
+  // Protect against division by zero or invalid inputs
+  if (T_kelvin <= 0) return I_0; // At 0K, return reference current
+  if (!Number.isFinite(I_0) || !Number.isFinite(E_a)) return 0;
+  
+  // Convert activation energy from eV to Joules for calculation
+  const E_a_J = toJ(E_a);
+  
+  // Calculate exponent: -E_a / (k_B * T)
+  // k_B is Boltzmann constant in J/K, T_kelvin is in Kelvin
+  const exponent = -E_a_J / (1.380649e-23 * T_kelvin); // 1.380649e-23 J/K
+  
+  // Return current: I_0 * exp(exponent)
+  // As temperature increases, exponent becomes less negative, current increases
+  return I_0 * Math.exp(exponent);
+}
+
+/**
+ * Alternative: Temperature-dependent activation energy form
+ * Sometimes E_a itself varies with temperature; this variant accepts T-dependent E_a
+ * 
+ * @param {number} I_0 - Reference current (Amperes)
+ * @param {function} E_a_func - Function that returns E_a(T) given temperature
+ * @param {number} T_kelvin - Absolute temperature (Kelvin)
+ * @returns {number} Current at given temperature
+ */
+export function calculateTemperatureDependentCurrentWithVaryingEa(I_0, E_a_func, T_kelvin) {
+  if (T_kelvin <= 0) return I_0;
+  const E_a = E_a_func(T_kelvin); // Activation energy as function of T
+  return calculateTemperatureDependentCurrent(I_0, E_a, T_kelvin);
+}
+
+
+
+
+
+
+
+
+
+
+
+// ------------------- Voltage-dependent tunneling (exact numerical integration) -------------------
+/**
+ * Voltage-dependent tunneling probability for spin-up electrons
+ * Accounts for voltage-induced modification of effective barrier height
+ * 
+ * Formula: T_↑ ≈ exp(-2 * integral from 0 to d of 
+ * /*sqrt((2m*:ℏ²)(V_eff↑ - q*V_ox/d*x - E_0)) dx)
+ * 
+ * The effective barrier height decreases linearly across the oxide due to applied voltage V_ox
+ * This creates a trapezoidal barrier shape instead of rectangular
+ * 
+ * @param {number} V_eff_up_eV - Effective barrier height for spin-up (eV)
+ * @param {number} E_0_eV - Electron energy (eV) - tunneling electron's starting energy
+ * @param {number} V_ox_eV - Applied voltage through oxide (eV)
+ * @param {number} d_m - Barrier thickness (meters)
+ * @returns {number} Transmission probability T_up (0 to 1)
+ */
+
+/**
+ * Calculate effective barrier heights for both spins
+ * V_eff incorporates exchange splitting from ferromagnetic layer
+ * 
+ * For spin-up:   V_eff↑ = V0 + J_ex/2
+ * For spin-down: V_eff↓ = V0 - J_ex/2
+ * 
+ * @param {number} V0_eV - Base barrier height (eV)
+ * @param {number} J_ex - Exchange coupling strength (eV)
+ * @param {number} M_FMI - Magnetization factor (±1)
+ * @returns {object} { V_eff_up, V_eff_down }
+ */
+
+
+export function calculateEffectiveBarrierHeights(V0_eV, J_ex = OUR_MODEL_DEFAULTS.J_ex, M_FMI = OUR_MODEL_DEFAULTS.M_FMI) {
+  // Exchange splitting: DeltaE = J_ex * M_FMI
+  const DeltaE = spinSplitting(J_ex, M_FMI);
+  
+  // Spin-up sees LOWER barrier (easier to tunnel)
+  const V_eff_up = V0_eV + DeltaE / 2.0;
+  
+  // Spin-down sees HIGHER barrier (harder to tunnel)
+  const V_eff_down = V0_eV - DeltaE / 2.0;
+  
+  return { V_eff_up, V_eff_down };
+}
+
+/**
+ * Voltage-dependent tunneling probability - REVISED
+ * Now directly uses V0 and derives V_eff internally
+ * 
+ * @param {number} V0_eV - Base barrier height (eV)
+ * @param {number} E_0_eV - Electron energy (eV)
+ * @param {number} V_ox_eV - Applied voltage (eV)
+ * @param {number} d_m - Barrier thickness (meters)
+ * @param {number} J_ex - Exchange coupling (eV)
+ * @param {number} M_FMI - Magnetization factor (±1)
+ * @param {string} spin - "up" or "down" to specify which spin channel
+ * @returns {number} Transmission probability T (0 to 1)
+ */
+
+
+export function calculateVoltageDependentTunneling(V0_eV, E_0_eV, V_ox_eV, d_m, J_ex = OUR_MODEL_DEFAULTS.J_ex, M_FMI = OUR_MODEL_DEFAULTS.M_FMI, spin = "up",  effective_electron_mass_multiplier=OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier) {
+  // Get effective barrier heights from V0 and J_ex
+  const { V_eff_up, V_eff_down } = calculateEffectiveBarrierHeights(V0_eV, J_ex, M_FMI);
+  const V_eff = spin === "up" ? V_eff_up : V_eff_down;
+  
+  // Numerical integration using trapezoidal rule
+  const numPoints = 500;
+  const dx = d_m / numPoints;
+  let integral = 0;
+  
+  for (let i = 0; i <= numPoints; i++) {
+    const x = i * dx;
+    
+    // V_eff - q*V_ox/d*x - E_0
+    // Voltage drop term increases linearly with position
+    const voltageDropTerm = (V_ox_eV / d_m) * x;
+    const effectiveBarrier = V_eff - voltageDropTerm - E_0_eV;
+    
+    // Only integrate where effectiveBarrier > 0 (classically forbidden region)
+    if (effectiveBarrier > 0) {
+      // sqrt((2m*/ℏ²) * effectiveBarrier) = kappa(x)
+      const kappa_local = Math.sqrt(2 * (m0 * effective_electron_mass_multiplier) * toJ(effectiveBarrier)) / hbar;
+      integral += kappa_local;
+    }
+  }
+  
+  integral *= dx;
+  
+  // T = exp(-2 * integral)
+  const exponent = -2 * integral;
+  return Math.exp(exponent);
+}
+
+
+/**
+ * Combined voltage-dependent tunneling for BOTH spin channels
+ * Now correctly derives V_eff from V0 + J_ex/2 (and V0 - J_ex/2)
+ * 
+ * @param {number} V0_eV - Base barrier height (eV)
+ * @param {number} E_0_eV - Electron energy (eV)
+ * @param {number} V_ox_eV - Applied voltage (eV)
+ * @param {number} d_m - Barrier thickness (meters)
+ * @param {number} J_ex - Exchange coupling (eV)
+ * @param {number} M_FMI - Magnetization factor (±1)
+ * @returns {object} { T_up, T_down }
+ */
+
+
+export function calculateVoltageDependentTunnelingBothSpins(V0_eV, E_0_eV, V_ox_eV, d_m, J_ex = OUR_MODEL_DEFAULTS.J_ex, M_FMI = OUR_MODEL_DEFAULTS.M_FMI, effective_electron_mass_multiplier = OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier) {
+  const T_up = calculateVoltageDependentTunneling(V0_eV, E_0_eV, V_ox_eV, d_m, J_ex, M_FMI, "up", effective_electron_mass_multiplier);
+  const T_down = calculateVoltageDependentTunneling(V0_eV, E_0_eV, V_ox_eV, d_m, J_ex, M_FMI, "down", effective_electron_mass_multiplier);
+  
+  return { T_up, T_down };
+}
+
+
+// ------------------- Combined temperature + voltage effects -------------------
+/**
+ * Full combined model - REVISED
+ * Temperature + voltage, with correct V_eff derivation
+ * 
+ * @param {number} I_0 - Reference current (Amperes)
+ * @param {number} E_a - Activation energy (eV)
+ * @param {number} T_kelvin - Temperature (Kelvin)
+ * @param {number} V0_eV - Base barrier height (eV)
+ * @param {number} E_0_eV - Electron energy (eV)
+ * @param {number} V_ox_eV - Applied voltage (eV)
+ * @param {number} d_m - Barrier thickness (meters)
+ * @param {number} J_ex - Exchange coupling (eV)
+ * @param {number} M_FMI - Magnetization factor (±1)
+ * @returns {object} Combined results with all components
+ */
+
+
+export function calculateCombinedTunnelingModel(I_0, E_a, T_kelvin, V0_eV, E_0_eV, V_ox_eV, d_m, J_ex = OUR_MODEL_DEFAULTS.J_ex, M_FMI = OUR_MODEL_DEFAULTS.M_FMI) {
+  // Temperature contribution
+  const I_temp = calculateTemperatureDependentCurrent(I_0, E_a, T_kelvin);
+  
+  // Voltage contribution (corrected)
+  const { T_up: T_up_voltage, T_down: T_down_voltage } = calculateVoltageDependentTunnelingBothSpins(V0_eV, E_0_eV, V_ox_eV, d_m, J_ex, M_FMI);
+  
+  // Effective barriers for reference
+  const { V_eff_up, V_eff_down } = calculateEffectiveBarrierHeights(V0_eV, J_ex, M_FMI);
+  
+  // Combined current
+  const I_total = I_temp * (T_up_voltage + T_down_voltage) / 2.0;
+  
+  return {
+    I_total,
+    I_temp,
+    T_up_voltage,
+    T_down_voltage,
+    V_eff_up,
+    V_eff_down,
+    temperature: T_kelvin,
+    voltage: V_ox_eV
+  };
+}
+
+
 // export friendly aliases to match older names used in your React code
 export const spinSplittingAlias = spinSplitting;
 export const spinEnergiesAlias = spinEnergies;
@@ -356,5 +573,10 @@ export default {
   calculateWavefunction,
   calculateTunnelingProbabilitiesExact,
   calculateTunnelingProbabilitiesWKB,
+  calculateTemperatureDependentCurrent,
+  calculateTemperatureDependentCurrentWithVaryingEa,
+  calculateVoltageDependentTunneling,
+  calculateVoltageDependentTunnelingBothSpins,
+  calculateCombinedTunnelingModel,
 };
 

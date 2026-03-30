@@ -64,7 +64,7 @@ function calculateVreqFromT(T_target, V0_eV, d_nm, { J_ex = 0.0, M_FMI = 0.0, sp
 
   return { E_req_eV: E_req_J / PH.eV, V_eff_eV: Veff_eV, kappa };
 }
-function calculateEfficiency(V0_eV, d_nm, E_eV, J_ex, M_FMI, alpha = 4.0, tempK_approx= 300) {
+function calculateEfficiency(V0_eV, d_nm, E_eV, J_ex, M_FMI, alpha = 4.0, tempK_approx= 300, effective_electron_mass_multiplier=(selectedChip === "our" ?PH.OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier : PH.CURRENT_MARKET_DEFAULTS.effective_electron_mass_multiplier)) {
   //Todo: replace with real physics-based calculation
   const T_updown = PH.calculateTunnelingProbabilitiesWKB(V0_eV, E_eV, d_nm, J_ex, M_FMI)
   const T_up = T_updown.T_up;      // number 0..1
@@ -78,8 +78,8 @@ function calculateEfficiency(V0_eV, d_nm, E_eV, J_ex, M_FMI, alpha = 4.0, tempK_
   const leakageWorst = leakageInfo.leakageWorst;
   const absP = Math.min(Math.max(Math.abs(P), 0), 1);
   const T_target = 1e-6;
-  const reqUp = calculateVreqFromT(T_target, V0_eV, d_nm, { J_ex, M_FMI, spin: "up" });
-  const reqDown = calculateVreqFromT(T_target, V0_eV, d_nm, { J_ex, M_FMI, spin: "down" });
+  const reqUp = calculateVreqFromT(T_target, V0_eV, d_nm, { J_ex, M_FMI, spin: "up", m_eff: PH.m0* effective_electron_mass_multiplier });
+  const reqDown = calculateVreqFromT(T_target, V0_eV, d_nm, { J_ex, M_FMI, spin: "down", m_eff: PH.m0* effective_electron_mass_multiplier });
   const Vreq_eV = Math.min(reqUp.E_req_eV || Infinity, reqDown.E_req_eV || Infinity);// measured/estimated voltage to hit T_target
   const Vmax = 3.0;
   const E_score = 1 - Math.min(Vreq_eV / Vmax, 1);
@@ -111,53 +111,89 @@ function calculateEfficiency(V0_eV, d_nm, E_eV, J_ex, M_FMI, alpha = 4.0, tempK_
     details: { reqUp, reqDown }
   };
 }
-function computeMetrics(voltage, temperature, model, V0, d_nm, E_eV, J_ex, M_FMI) {
-  //Todo:adjust the fuction to work based on physics and add other aspects not only voltage and temp
-  const tempPenalty = (Number.isNaN(temperature))? 0 : Math.max(0, (temperature - 25) * 0.35);//placeholder thing replaced by real physics
-  const fragPenalty = Object.keys(model).length === 0 ? 0: model.fragility * 6.0; // placeholder, replaced by real physics-based fragility impact
-  const voltageBoost = (Number.isNaN(voltage))? 0: (voltage - 1) * 1.6; // placeholder, replaced by real physics-based voltage impact
-  const instability =  (Number.isNaN(temperature))? 0 : Math.max(0, (temperature - 80) / 70); // placeholder, replaced by real physics-based instability metric (e.g. from leakage or error rates at high temp)
-  // let efficiency = m.base_eff - tempPenalty - fragPenalty + voundefinedltageBoost - instability * 8.0;
-  const phys = calculateEfficiency(V0, d_nm, E_eV, J_ex, M_FMI);
-  console.log("Physics details:", phys);
-  // phys.eff_percent is 0..100, phys.eff_score is 0..1
-  // combine with simple penalties (scale appropriately)
-  // convert phys.eff_percent back to 0..100 numeric base
-  let efficiencyBase = phys.eff_percent; // 0..100
-  let efficiency = efficiencyBase - tempPenalty - fragPenalty + voltageBoost - instability * 8.0;
-  console.log("efficiencyBase:", efficiencyBase, "tempPenalty:", tempPenalty, "fragPenalty:", fragPenalty, "voltageBoost:", voltageBoost, "instability:", instability, "efficiency:", efficiency);
-  efficiency = Math.max(0, Math.min(100, efficiency));
+// function computeMetrics(voltage, temperature, model, V0, d_nm, E_eV, J_ex, M_FMI) {
+//   //Todo:adjust the fuction to work based on physics and add other aspects not only voltage and temp
+//   const tempPenalty = (Number.isNaN(temperature))? 0 : Math.max(0, (temperature - 25) * 0.35);//placeholder thing replaced by real physics
+//   const fragPenalty = Object.keys(model).length === 0 ? 0: model.fragility * 6.0; // placeholder, replaced by real physics-based fragility impact
+//   const voltageBoost = (Number.isNaN(voltage))? 0: (voltage - 1) * 1.6; // placeholder, replaced by real physics-based voltage impact
+//   const instability =  (Number.isNaN(temperature))? 0 : Math.max(0, (temperature - 80) / 70); // placeholder, replaced by real physics-based instability metric (e.g. from leakage or error rates at high temp)
+//   // let efficiency = m.base_eff - tempPenalty - fragPenalty + voundefinedltageBoost - instability * 8.0;
+//   const phys = calculateEfficiency(V0, d_nm, E_eV, J_ex, M_FMI);
+//   console.log("Physics details:", phys);
+//   // phys.eff_percent is 0..100, phys.eff_score is 0..1
+//   // combine with simple penalties (scale appropriately)
+//   // convert phys.eff_percent back to 0..100 numeric base
+//   let efficiencyBase = phys.eff_percent; // 0..100
+//   let efficiency = efficiencyBase - tempPenalty - fragPenalty + voltageBoost - instability * 8.0;
+//   console.log("efficiencyBase:", efficiencyBase, "tempPenalty:", tempPenalty, "fragPenalty:", fragPenalty, "voltageBoost:", voltageBoost, "instability:", instability, "efficiency:", efficiency);
+//   efficiency = Math.max(0, Math.min(100, efficiency));
 
-  const cost_est =Object.keys(model).length === 0 ? 0: Number(model.cost);
-  return {
-    efficiency: Number(efficiency.toFixed(2)),
-    cost_est: Number(cost_est.toFixed(2)),
-    instability: Number(instability.toFixed(4)),
-    model_name: model.name,
-    fragility: model.fragility,
-    physics: phys,
-  };
-}
+//   const cost_est =Object.keys(model).length === 0 ? 0: Number(model.cost);
+//   return {
+//     efficiency: Number(efficiency.toFixed(2)),
+//     cost_est: Number(cost_est.toFixed(2)),
+//     instability: Number(instability.toFixed(4)),
+//     model_name: model.name,
+//     fragility: model.fragility,
+//     physics: phys,
+//   };
+// }
 
 
 
 
 export default function App() {
-  const [tab, setTab] = useState(1);
+  const [tab, setTab] = useState(2);
   const [voltage, setVoltage] = useState(5);
   const [temperature, setTemperature] = useState(25);
-  const [humidity, setHumidity] = useState(50);
   const [selectedChip, setSelectedChip] = useState("our");
-  const simRef = useRef(null);
-
+  const [parameter, setParameter] = useState(false);
   // Barrier / FMI params (for Tab 2). Moved to top-level so SideControlPanel can control them.
-  const [V0, setV0] = useState(PH.V0_eV);      // eV
+  const [V0, setV0] = useState((selectedChip === "our" ?PH.OUR_MODEL_DEFAULTS.d_nm : PH.CURRENT_MARKET_DEFAULTS.d_nm));      // eV
   const [d_nm, setDnm] = useState((selectedChip === "our" ?PH.OUR_MODEL_DEFAULTS.d_nm : PH.CURRENT_MARKET_DEFAULTS.d_nm));   // nm
   const [E_eV, setE] = useState((selectedChip === "our" ?PH.OUR_MODEL_DEFAULTS.E_eV : PH.CURRENT_MARKET_DEFAULTS.E_eV));     // eV
   const [J_ex, setJex] = useState((selectedChip === "our" ?PH.OUR_MODEL_DEFAULTS.J_ex : PH.CURRENT_MARKET_DEFAULTS.J_ex));  // eV
   const [M_FMI, setM] = useState((selectedChip === "our" ?PH.OUR_MODEL_DEFAULTS.M_FMI : PH.CURRENT_MARKET_DEFAULTS.M_FMI));    // dimensionless
+  const [spinUP, setSpinUP] = useState(true);
+  const [effectiveElectronMassMultiplier, setEffectiveElectronMassMultiplier] = useState((selectedChip === "our" ?PH.OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier : PH.CURRENT_MARKET_DEFAULTS.effective_electron_mass_multiplier));
+  const [particleCount, setParticleCount] = useState(100);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const simRef = useRef(null);
 
-  const metrics = computeMetrics(voltage, temperature, CHIP_MODELS[selectedChip], V0, d_nm, E_eV, J_ex, M_FMI);
+  const enterFullscreen = async () => {
+    try {
+      if (simRef.current && simRef.current.requestFullscreen) {
+        await simRef.current.requestFullscreen();
+        setIsFullScreen(true);
+      }
+    } catch (err) {
+      console.error("Fullscreen request failed:", err);
+    }
+  };
+
+  const exitFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        setIsFullScreen(false);
+      }
+    } catch (err) {
+      console.error("Exit fullscreen failed:", err);
+    }
+  };
+
+  // Listen for fullscreen changes
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const isCurrentlyFullscreen = !!document.fullscreenElement;
+      setIsFullScreen(isCurrentlyFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  //const metrics = computeMetrics(voltage, temperature, CHIP_MODELS[selectedChip], V0, d_nm, E_eV, J_ex, M_FMI);
   const totalPartsPriceLow = PARTS.reduce((s, p) => s + (p.lowp || 0), 0).toFixed(2);
   const totalPartsPriceHigh = PARTS.reduce((s, p) => s + (p.highp || 0), 0).toFixed(2);
 
@@ -167,32 +203,34 @@ export default function App() {
       setE(PH.OUR_MODEL_DEFAULTS.E_eV);
       setJex(PH.OUR_MODEL_DEFAULTS.J_ex);
       setM(PH.OUR_MODEL_DEFAULTS.M_FMI);
+      setEffectiveElectronMassMultiplier(PH.OUR_MODEL_DEFAULTS.effective_electron_mass_multiplier)
     } else if (selectedChip === "market") {
       setDnm(PH.CURRENT_MARKET_DEFAULTS.d_nm);
       setE(PH.CURRENT_MARKET_DEFAULTS.E_eV);
       setJex(PH.CURRENT_MARKET_DEFAULTS.J_ex);
       setM(PH.CURRENT_MARKET_DEFAULTS.M_FMI);
+      setEffectiveElectronMassMultiplier(PH.CURRENT_MARKET_DEFAULTS.effective_electron_mass_multiplier)
     }
   }, [selectedChip]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <div className="relative flex-1 flex flex-col">
-        <header className="flex items-center justify-between px-4 py-3 bg-white/80 backdrop-blur-sm border-b">
-          <div className="flex items-center gap-3">
+        <header className="flex flex-col lg:flex-row lg:items-center justify-between px-3 sm:px-4 py-3 bg-white/80 backdrop-blur-sm border-b gap-2">
+          <div className="flex items-center gap-2">
             <div className="text-lg font-semibold">Flash Memory Cell</div>
             <div className="text-sm text-slate-500">— interactive demo</div>
           </div>
 
-          <div className="flex-1 flex justify-center">
+          <div className="flex justify-center lg:flex-1">
             <Tabs tab={tab} onChange={setTab} />
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 justify-center lg:justify-end">
             <div className="hidden sm:block text-sm text-slate-600 mr-2">Compare</div>
             <div className="flex gap-2">
               <button
-                className={`px-3 py-2 rounded-md text-sm font-semibold transition ${
+                className={`px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm font-semibold transition ${
                   selectedChip === "our" ? "bg-sky-600 text-white shadow" : "bg-white text-slate-800 border"
                 }`}
                 onClick={() => setSelectedChip("our")}
@@ -200,7 +238,7 @@ export default function App() {
                 Our model
               </button>
               <button
-                className={`px-3 py-2 rounded-md text-sm font-semibold transition ${
+                className={`px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm font-semibold transition ${
                   selectedChip === "market" ? "bg-sky-600 text-white shadow" : "bg-white text-slate-800 border"
                 }`}
                 onClick={() => setSelectedChip("market")}
@@ -211,30 +249,44 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0">
           {/* MAIN */}
-          <main className="flex-1 p-4 min-h-0 flex flex-col">
-            <div className="bg-white rounded-xl p-4 shadow-lg flex flex-col flex-1 min-h-0">
+          <main className="flex-1 p-2 sm:p-4 min-h-0 flex flex-col">
+            <div className="bg-white rounded-xl p-3 sm:p-4 shadow-lg flex flex-col flex-1 min-h-0">
               <div className="font-semibold text-lg mb-2">
-                {tab === 1 ? "SSD — Parts & Price" : tab === 2 ? "Barrier / Tunneling Simulator" : "Harsh environment"}
+                {tab === 1 ? "SSD — Parts & Price" : tab === 2 ? "Barrier / Tunneling Simulator" : "Tunneling Simulation"}
               </div>
 
-              <div className="flex-1 min-h-0 flex flex-col gap-3">
+
+                <div ref={simRef}
+  className={
+    isFullScreen
+      ? "fixed inset-0 z-9999 bg-slate-50 p-2 flex flex-col gap-3"
+      : "flex-1 min-h-0 flex flex-col gap-3"
+  }
+>
                 <div className="flex-1 min-h-0 rounded-lg overflow-hidden bg-slate-900 p-2">
                   <SimCanvas
-                    ref={simRef}
+                    enterFullscreen={enterFullscreen}
+                    exitFullscreen={exitFullscreen}
                     tab={tab}
                     voltage={voltage}
-                    temperature={temperature}
                     modelKey={selectedChip}
-                    metrics={metrics}
+                    setModelKey={setSelectedChip}
                     parts={PARTS}
+                    spinUP={spinUP}
+                    setSpinUP={setSpinUP}
+                    particleCount={particleCount}
+                    parameter={parameter}
                     // barrier props for Tab 2
                     V0={V0}
                     d_nm={d_nm}
                     E_eV={E_eV}
                     J_ex={J_ex}
                     M_FMI={M_FMI}
+                    effectiveElectronMassMultiplier={effectiveElectronMassMultiplier}
+                    isFullScreen = {isFullScreen}
+                    setIsFullScreen={setIsFullScreen}
                   />
                 </div>
               </div>
@@ -242,33 +294,40 @@ export default function App() {
           </main>
 
           {/* SINGLE SideControlPanel on the RIGHT */}
-          <SideControlPanel
-            voltage={voltage}
-            setVoltage={setVoltage}
-            temperature={temperature}
-            setTemperature={setTemperature}
-            humidity={humidity}
-            setHumidity={setHumidity}
-            computeMetrics={computeMetrics}
-            tab={tab}
-            parts={PARTS}
-            totalPartsPriceLow={totalPartsPriceLow}
-            totalPartsPriceHigh={totalPartsPriceHigh}
-            selectedChip={selectedChip}
-            calculateEfficiency={calculateEfficiency}
-            chipModel={CHIP_MODELS[selectedChip]}
-            // pass barrier handlers so SideControlPanel shows barrier sliders when tab === 2
-            V0={V0}
-            setV0={setV0}
-            d_nm={d_nm}
-            setDnm={setDnm}
-            E_eV={E_eV}
-            setE={setE}
-            J_ex={J_ex}
-            setJex={setJex}
-            M_FMI={M_FMI}
-            setM={setM}
-          />
+          {/* <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l bg-slate-50">
+            <SideControlPanel
+              voltage={voltage}
+              setVoltage={setVoltage}
+              setTemperature={setTemperature}
+              parameter={parameter}
+              setParameter={setParameter}
+              effectiveElectronMassMultiplier={effectiveElectronMassMultiplier}
+              setEffectiveElectronMassMultiplier={setEffectiveElectronMassMultiplier}
+              tab={tab}
+              parts={PARTS}
+              totalPartsPriceLow={totalPartsPriceLow}
+              totalPartsPriceHigh={totalPartsPriceHigh}
+              selectedChip={selectedChip}
+              // calculateEfficiency={calculateEfficiency}
+              chipModel={CHIP_MODELS[selectedChip]}
+              spinUP={spinUP}
+              setSpinUP={setSpinUP}
+              particleCount={particleCount}
+              setParticleCount={setParticleCount}
+              // pass barrier handlers so SideControlPanel shows barrier sliders when tab === 2
+              V0={V0}
+              setV0={setV0}
+              d_nm={d_nm}
+              setDnm={setDnm}
+              E_eV={E_eV}
+              setE={setE}
+              J_ex={J_ex}
+              setJex={setJex}
+              M_FMI={M_FMI}
+              setM={setM}
+              defaults={PH.OUR_MODEL_DEFAULTS}
+            />
+          </div> */}
         </div>
       </div>
     </div>
