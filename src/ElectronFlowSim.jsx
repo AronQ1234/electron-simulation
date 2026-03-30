@@ -586,7 +586,7 @@ export default function ElectronTunneling({
                 className={`px-3 py-2 sm:px-4 sm:py-2 rounded-md text-sm font-semibold transition ${
                   modelKey === "our" ? "bg-sky-600 text-white shadow" : "bg-white text-slate-800 border"
                 }`}
-                onClick={() => setModelKey((prevKey) => prevKey === "our" ? "Market" : "our")}
+                onClick={() => setModelKey((prevKey) => prevKey === "our" ? "market" : "our")}
               >
                 Our model
               </button>
