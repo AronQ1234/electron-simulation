@@ -588,7 +588,7 @@ export default function ElectronTunneling({
                 }`}
                 onClick={() => setModelKey((prevKey) => prevKey === "our" ? "market" : "our")}
               >
-                {modelKey === "our" ? "Market Model" : "Our Model"}
+                {modelKey === "our" ? "Our Model" : "Market Model"}
               </button>
 
             </div>
